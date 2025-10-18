@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Kanji Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom font for the kanji character itself */
+        .kanji-char {
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+        /* Style for the SVG stroke order diagram to make it visible in dark mode */
+        #stroke-order-img {
+            filter: invert(0);
+        }
+        .dark #stroke-order-img {
+            filter: invert(1);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-lg mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">今日の漢字</h1>
+            <p class="text-slate-600 dark:text-slate-400">Random Kanji Generator</p>
+            <!-- Generate Button -->
+            <div class="mt-6">
+                <button id="generate-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-slate-900 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed" disabled>
+                    Generate New Kanji
+                </button>
+            </div>
+        </header>
+
+        <main class="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6 md:p-8">
+            <!-- Status/Loading Area --><div id="status-section" class="text-center p-4">
+                 <p id="status-message" class="text-sm text-slate-500 dark:text-slate-400">Loading Kanji data...</p>
+            </div>
+
+            <!-- Kanji Display Section --><div id="kanji-display-section" class="hidden">
+                 <!-- Frequency Display -->
+                <div class="text-center mb-2">
+                    <span class="font-bold text-slate-700 dark:text-slate-300 mr-2">Frequency:</span>
+                    <span id="kanji-frequency" class="font-bold transition-all duration-500 inline-block" style="color: rgb(255, 255, 255);">...</span>
+                </div>
+
+                <!-- Stroke Order Diagram --><div class="bg-white rounded-lg aspect-square flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-700 p-2 md:p-4 mb-6">
+                   <img id="stroke-order-img" src="" alt="Kanji stroke order diagram" class="w-full h-full object-contain">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Kanji Character --><div class="bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center aspect-square w-full gap-2 p-2">
+                        <span id="kanji-display" class="kanji-char text-6xl md:text-7xl text-slate-900 dark:text-white"></span>
+                        <span id="kanji-old-display" class="kanji-char text-4xl md:text-5xl text-slate-500 dark:text-slate-400"></span>
+                    </div>
+
+                    <!-- Meaning, Readings, and JLPT --><div class="space-y-4 flex flex-col justify-center">
+                        <div>
+                            <h2 class="font-semibold text-lg mb-1 text-slate-900 dark:text-white">Meaning</h2>
+                            <p id="kanji-meaning" class="text-slate-600 dark:text-slate-300"></p>
+                        </div>
+                        <div>
+                            <h2 class="font-semibold text-lg mb-1 text-slate-900 dark:text-white">Readings</h2>
+                            <div class="text-sm">
+                                <p class="text-slate-500 dark:text-slate-400"><strong>On'yomi:</strong> <span id="kanji-onyomi"></span></p>
+                                <p class="text-slate-500 dark:text-slate-400"><strong>Kun'yomi:</strong> <span id="kanji-kunyomi"></span></p>
+                            </div>
+                        </div>
+                        <div>
+                            <h2 class="font-semibold text-lg mb-1 text-slate-900 dark:text-white">JLPT Level</h2>
+                            <p id="kanji-jlpt" class="text-slate-600 dark:text-slate-300"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+        
+        <footer class="text-center mt-8">
+            <p class="text-xs text-slate-500 dark:text-slate-500">Stroke order diagrams from KanjiVG. App created by Gemini.</p>
+        </footer>
+    </div>
+
+    <script>
+        // --- DATA ---
+        let kanjiData = [];
+
+        // --- DOM Elements ---
+        const statusSection = document.getElementById('status-section');
+        const statusMessage = document.getElementById('status-message');
+        const kanjiDisplaySection = document.getElementById('kanji-display-section');
+        const kanjiDisplay = document.getElementById('kanji-display');
+        const kanjiOldDisplay = document.getElementById('kanji-old-display');
+        const kanjiMeaning = document.getElementById('kanji-meaning');
+        const kanjiOnyomi = document.getElementById('kanji-onyomi');
+        const kanjiKunyomi = document.getElementById('kanji-kunyomi');
+        const kanjiJlpt = document.getElementById('kanji-jlpt');
+        const kanjiFrequency = document.getElementById('kanji-frequency');
+        const strokeOrderImg = document.getElementById('stroke-order-img');
+        const generateBtn = document.getElementById('generate-btn');
+
+        let lastKanji = null;
+
+        // --- Functions ---
+        
+        /**
+         * Fetches and parses the Kanji CSV data from a given URL.
+         * @param {string} url - The URL of the CSV file.
+         */
+        async function loadAndParseKanjiData(url) {
+            statusMessage.textContent = 'Fetching Kanji data from the web...';
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Network response was not ok: ${response.statusText}`);
+                }
+                const csvText = await response.text();
+                statusMessage.textContent = 'Parsing data...';
+
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        try {
+                            // Transform the parsed data to match the app's expected format.
+                            kanjiData = results.data.map(row => {
+                                if (!row.kanji || !row.meanings) {
+                                    return null; // Skip invalid rows
+                                }
+                                return {
+                                    char: row.kanji,
+                                    oldChar: row.kanji_old || null,
+                                    meaning: (row.meanings || '').split('|').join(', '), // CSV uses '|' separator
+                                    onyomi: row.on || 'N/A',
+                                    kunyomi: row.kun || 'N/A',
+                                    frequency: row.frequency ? parseInt(row.frequency, 10) : null,
+                                    jlpt: row.jlpt || 'N/A'
+                                };
+                            }).filter(Boolean); // Remove any null entries
+
+                            if (kanjiData.length === 0) {
+                                 throw new Error("CSV file is empty or in the wrong format.");
+                            }
+                            
+                            // Update UI to show the main content
+                            statusSection.classList.add('hidden');
+                            kanjiDisplaySection.classList.remove('hidden');
+                            generateBtn.disabled = false;
+                            generateRandomKanji(); // Display the first Kanji
+
+                        } catch (error) {
+                            statusMessage.textContent = `Error: Could not process data. ${error.message}`;
+                            generateBtn.disabled = true;
+                        }
+                    },
+                    error: function(error) {
+                        statusMessage.textContent = `Error parsing CSV data: ${error.message}`;
+                        generateBtn.disabled = true;
+                    }
+                });
+
+            } catch (error) {
+                statusMessage.textContent = `Failed to load Kanji data: ${error.message}`;
+            }
+        }
+
+        /**
+         * Selects a new random Kanji from the data list that is different from the last one.
+         * Updates the UI with the new Kanji's information.
+         */
+        function generateRandomKanji() {
+            if (kanjiData.length === 0) {
+                kanjiDisplay.textContent = '...';
+                kanjiMeaning.textContent = 'No Kanji data is available.';
+                return;
+            }
+
+            let randomKanji;
+            
+            // Ensure the new Kanji is different from the last one
+            do {
+                const randomIndex = Math.floor(Math.random() * kanjiData.length);
+                randomKanji = kanjiData[randomIndex];
+            } while (kanjiData.length > 1 && randomKanji === lastKanji);
+
+            lastKanji = randomKanji;
+            
+            // Update Frequency Display and Style
+            const freq = randomKanji.frequency;
+            if (freq !== null) {
+                // Set the effective range for the transition. Frequencies above this are treated as the max.
+                const maxFreq = 5000; 
+                const normalizedFreq = Math.min(freq / maxFreq, 1);
+                const invertedNormalizedFreq = 1 - normalizedFreq; // Invert the logic
+
+                // Interpolate color from white to dark red. Low freq = red, high freq = white.
+                const r = Math.round(255 - (255 - 139) * invertedNormalizedFreq);
+                const g = Math.round(255 - (255 - 0) * invertedNormalizedFreq);
+                const b = Math.round(255 - (255 - 0) * invertedNormalizedFreq);
+                kanjiFrequency.style.color = `rgb(${r}, ${g}, ${b})`;
+
+                // Interpolate font size. Low freq = large, high freq = small
+                const scale = 1 + (invertedNormalizedFreq * 0.5); // Max scale is 1.5x
+                kanjiFrequency.style.transform = `scale(${scale})`;
+                
+                kanjiFrequency.textContent = freq.toLocaleString();
+            } else {
+                kanjiFrequency.textContent = 'N/A';
+                kanjiFrequency.style.color = ''; // Reset to default
+                kanjiFrequency.style.transform = 'scale(1)';
+            }
+            
+            // Get the 5-digit padded Unicode hex for the KanjiVG URL
+            const unicodeHex = randomKanji.char.charCodeAt(0).toString(16).padStart(5, '0');
+            const imageUrl = `https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/${unicodeHex}.svg`;
+
+            // Update the DOM elements
+            kanjiDisplay.textContent = randomKanji.char;
+            
+            if (randomKanji.oldChar) {
+                kanjiOldDisplay.textContent = `(${randomKanji.oldChar})`;
+            } else {
+                kanjiOldDisplay.textContent = '';
+            }
+
+            kanjiMeaning.textContent = randomKanji.meaning;
+            kanjiOnyomi.textContent = randomKanji.onyomi;
+            kanjiKunyomi.textContent = randomKanji.kunyomi;
+            kanjiJlpt.textContent = randomKanji.jlpt !== 'N/A' ? `N${randomKanji.jlpt}` : 'N/A';
+            
+            // By updating the src, the browser will fetch the new image
+            strokeOrderImg.src = imageUrl;
+            strokeOrderImg.alt = `Stroke order for ${randomKanji.char}`;
+        }
+
+
+        // --- Event Listeners ---
+        generateBtn.addEventListener('click', generateRandomKanji);
+
+        // --- Initial Load ---
+        // On page load, fetch and parse the CSV from the specified URL.
+        document.addEventListener('DOMContentLoaded', () => {
+             const kanjiCsvUrl = 'joyo.csv';
+             loadAndParseKanjiData(kanjiCsvUrl);
+        });
+
+    </script>
+</body>
+</html>
+
