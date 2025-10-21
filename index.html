@@ -74,10 +74,14 @@
                                 <p class="text-slate-500 dark:text-slate-400"><strong>Kun'yomi:</strong> <span id="kanji-kunyomi"></span></p>
                             </div>
                         </div>
-                        <div>
-                            <h2 class="font-semibold text-lg mb-1 text-slate-900 dark:text-white">JLPT Level</h2>
+                        <div class="flex items-baseline gap-2">
+                            <h2 class="font-semibold text-lg text-slate-900 dark:text-white">JLPT Level:</h2>
                             <p id="kanji-jlpt" class="text-slate-600 dark:text-slate-300"></p>
                         </div>
+                        <div class="flex items-baseline gap-2">
+                           <h2 class="font-semibold text-lg text-slate-900 dark:text-white">WaniKani Level:</h2>
+                           <p id="kanji-wk" class="text-slate-600 dark:text-slate-300"></p>
+                       </div>
                     </div>
                 </div>
             </div>
@@ -124,6 +128,7 @@
         const kanjiOnyomi = document.getElementById('kanji-onyomi');
         const kanjiKunyomi = document.getElementById('kanji-kunyomi');
         const kanjiJlpt = document.getElementById('kanji-jlpt');
+        const kanjiWk = document.getElementById('kanji-wk');
         const kanjiFrequency = document.getElementById('kanji-frequency');
         const strokeOrderImg = document.getElementById('stroke-order-img');
         const generateBtn = document.getElementById('generate-btn');
@@ -219,6 +224,7 @@
                 kanjiOnyomi.textContent = 'N/A';
                 kanjiKunyomi.textContent = 'N/A';
                 kanjiJlpt.textContent = 'N/A';
+                kanjiWk.textContent = 'N/A';
                 kanjiFrequency.textContent = 'N/A';
                 strokeOrderImg.src = '';
                 strokeOrderImg.alt = 'No Kanji to display';
@@ -278,6 +284,7 @@
             kanjiOnyomi.textContent = randomKanji.onyomi;
             kanjiKunyomi.textContent = randomKanji.kunyomi;
             kanjiJlpt.textContent = randomKanji.jlpt !== 'N/A' ? `N${randomKanji.jlpt}` : 'N/A';
+            kanjiWk.textContent = randomKanji.wkLevel || 'N/A';
             
             // By updating the src, the browser will fetch the new image
             strokeOrderImg.src = imageUrl;
