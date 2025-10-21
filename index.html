@@ -7,8 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https'://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -28,6 +27,7 @@
 </head>
 <body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 flex items-center justify-center min-h-screen p-4">
 
+    <div id="generation-counter" class="fixed top-2 right-2 text-slate-300 dark:text-slate-700 text-sm font-mono pointer-events-none"></div>
     <div class="w-full max-w-lg mx-auto">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">今日の漢字</h1>
@@ -84,6 +84,27 @@
 
         </main>
         
+        <!-- Filter Section -->
+        <div id="filter-section" class="text-center my-8 space-y-4">
+           <div>
+               <button id="jlpt-filter-toggle-btn" class="w-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-slate-800 dark:text-slate-200 font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-slate-900">
+                   <span>Filter by JLPT Level</span>
+                   <svg class="w-4 h-4 inline-block ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+               </button>
+               <div id="jlpt-filters" class="hidden mt-4 grid grid-cols-5 gap-2">
+                   <!-- JLPT level buttons will be inserted here -->
+               </div>
+           </div>
+           <div>
+               <button id="wk-filter-toggle-btn" class="w-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-slate-800 dark:text-slate-200 font-bold py-3 px-4 rounded-lg transition-transform transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 dark:focus:ring-offset-slate-900">
+                   <span>Filter by WaniKani Level</span>
+                   <svg class="w-4 h-4 inline-block ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+               </button>
+               <div id="wk-filters" class="hidden mt-4 grid grid-cols-10 gap-2">
+                   <!-- WaniKani level buttons will be inserted here -->
+               </div>
+           </div>
+       </div>
         <footer class="text-center mt-8">
             <p class="text-xs text-slate-500 dark:text-slate-500">Stroke order diagrams from KanjiVG. App created by Gemini.</p>
         </footer>
@@ -106,70 +127,75 @@
         const kanjiFrequency = document.getElementById('kanji-frequency');
         const strokeOrderImg = document.getElementById('stroke-order-img');
         const generateBtn = document.getElementById('generate-btn');
+        const jlptFilterToggleBtn = document.getElementById('jlpt-filter-toggle-btn');
+        const jlptFilters = document.getElementById('jlpt-filters');
+        const wkFilterToggleBtn = document.getElementById('wk-filter-toggle-btn');
+        const wkFilters = document.getElementById('wk-filters');
+        const generationCounter = document.getElementById('generation-counter');
+
+        let activeJlptLevels = [];
+        let activeWkLevels = [];
+        let generationCount = 0;
 
         let lastKanji = null;
 
         // --- Functions ---
-        
+
         /**
-         * Fetches and parses the Kanji CSV data from a given URL.
-         * @param {string} url - The URL of the CSV file.
+         * Fetches and parses the Kanji JSON data from a given URL.
+         * @param {string} url - The URL of the JSON file.
          */
         async function loadAndParseKanjiData(url) {
-            statusMessage.textContent = 'Fetching Kanji data from the web...';
+            statusMessage.textContent = 'Fetching Kanji data...';
             try {
                 const response = await fetch(url);
                 if (!response.ok) {
                     throw new Error(`Network response was not ok: ${response.statusText}`);
                 }
-                const csvText = await response.text();
+                const jsonData = await response.json();
                 statusMessage.textContent = 'Parsing data...';
 
-                Papa.parse(csvText, {
-                    header: true,
-                    skipEmptyLines: true,
-                    complete: function(results) {
-                        try {
-                            // Transform the parsed data to match the app's expected format.
-                            kanjiData = results.data.map(row => {
-                                if (!row.kanji || !row.meanings) {
-                                    return null; // Skip invalid rows
-                                }
-                                return {
-                                    char: row.kanji,
-                                    oldChar: row.kanji_old || null,
-                                    meaning: (row.meanings || '').split('|').join(', '), // CSV uses '|' separator
-                                    onyomi: row.on || 'N/A',
-                                    kunyomi: row.kun || 'N/A',
-                                    frequency: row.frequency ? parseInt(row.frequency, 10) : null,
-                                    jlpt: row.jlpt || 'N/A'
-                                };
-                            }).filter(Boolean); // Remove any null entries
+                kanjiData = Object.entries(jsonData).map(([char, details]) => {
+                    return {
+                        char: char,
+                        oldChar: details.kanji_old || null,
+                        meaning: details.meanings.join(', '),
+                        onyomi: details.readings_on.join(', ') || 'N/A',
+                        kunyomi: details.readings_kun.join(', ') || 'N/A',
+                        frequency: details.freq !== null ? parseInt(details.freq, 10) : null,
+                        jlpt: details.jlpt_new || 'N/A',
+                        wkLevel: details.wk_level || 'N/A'
+                    };
+                }).filter(Boolean); // Remove any null entries
 
-                            if (kanjiData.length === 0) {
-                                 throw new Error("CSV file is empty or in the wrong format.");
-                            }
-                            
-                            // Update UI to show the main content
-                            statusSection.classList.add('hidden');
-                            kanjiDisplaySection.classList.remove('hidden');
-                            generateBtn.disabled = false;
-                            generateRandomKanji(); // Display the first Kanji
+                if (kanjiData.length === 0) {
+                    throw new Error("JSON file is empty or in the wrong format.");
+                }
 
-                        } catch (error) {
-                            statusMessage.textContent = `Error: Could not process data. ${error.message}`;
-                            generateBtn.disabled = true;
-                        }
-                    },
-                    error: function(error) {
-                        statusMessage.textContent = `Error parsing CSV data: ${error.message}`;
-                        generateBtn.disabled = true;
-                    }
-                });
+                // Update UI to show the main content
+                statusSection.classList.add('hidden');
+                kanjiDisplaySection.classList.remove('hidden');
+                generateBtn.disabled = false;
+                generateRandomKanji(); // Display the first Kanji
 
             } catch (error) {
-                statusMessage.textContent = `Failed to load Kanji data: ${error.message}`;
+                statusMessage.textContent = `Failed to load or parse Kanji data: ${error.message}`;
+                generateBtn.disabled = true;
             }
+        }
+
+        function getFilteredKanji() {
+            let filtered = kanjiData;
+
+            if (activeJlptLevels.length > 0) {
+                filtered = filtered.filter(k => activeJlptLevels.includes(parseInt(k.jlpt)));
+            }
+
+            if (activeWkLevels.length > 0) {
+                filtered = filtered.filter(k => activeWkLevels.includes(parseInt(k.wkLevel)));
+            }
+
+            return filtered;
         }
 
         /**
@@ -177,9 +203,26 @@
          * Updates the UI with the new Kanji's information.
          */
         function generateRandomKanji() {
+            incrementGenerationCount();
             if (kanjiData.length === 0) {
                 kanjiDisplay.textContent = '...';
                 kanjiMeaning.textContent = 'No Kanji data is available.';
+                return;
+            }
+
+            const filteredKanji = getFilteredKanji();
+
+            if (filteredKanji.length === 0) {
+                kanjiDisplay.textContent = '-';
+                kanjiMeaning.textContent = 'No Kanji available for the selected filters.';
+                kanjiOldDisplay.textContent = '';
+                kanjiOnyomi.textContent = 'N/A';
+                kanjiKunyomi.textContent = 'N/A';
+                kanjiJlpt.textContent = 'N/A';
+                kanjiFrequency.textContent = 'N/A';
+                strokeOrderImg.src = '';
+                strokeOrderImg.alt = 'No Kanji to display';
+                lastKanji = null;
                 return;
             }
 
@@ -187,9 +230,9 @@
             
             // Ensure the new Kanji is different from the last one
             do {
-                const randomIndex = Math.floor(Math.random() * kanjiData.length);
-                randomKanji = kanjiData[randomIndex];
-            } while (kanjiData.length > 1 && randomKanji === lastKanji);
+                const randomIndex = Math.floor(Math.random() * filteredKanji.length);
+                randomKanji = filteredKanji[randomIndex];
+            } while (filteredKanji.length > 1 && randomKanji === lastKanji);
 
             lastKanji = randomKanji;
             
@@ -197,7 +240,7 @@
             const freq = randomKanji.frequency;
             if (freq !== null) {
                 // Set the effective range for the transition. Frequencies above this are treated as the max.
-                const maxFreq = 5000; 
+                const maxFreq = 5000;
                 const normalizedFreq = Math.min(freq / maxFreq, 1);
                 const invertedNormalizedFreq = 1 - normalizedFreq; // Invert the logic
 
@@ -241,15 +284,139 @@
             strokeOrderImg.alt = `Stroke order for ${randomKanji.char}`;
         }
 
+        /**
+         * Toggles the visibility of a filter section.
+         */
+        function toggleFilterVisibility(filterContainer, button) {
+            filterContainer.classList.toggle('hidden');
+            const icon = button.querySelector('svg');
+            icon.classList.toggle('rotate-180');
+        }
+
+        /**
+         * Updates the active JLPT levels based on the selected filters.
+         * @param {number} level - The JLPT level to toggle.
+         */
+        function updateJlptFilter(level) {
+            const index = activeJlptLevels.indexOf(level);
+            if (index > -1) {
+                activeJlptLevels.splice(index, 1);
+            } else {
+                activeJlptLevels.push(level);
+            }
+            localStorage.setItem('jlptFilters', JSON.stringify(activeJlptLevels));
+            updateFilterButtons();
+            generateRandomKanji();
+        }
+
+        /**
+         * Updates the active WaniKani levels based on selected filters.
+         * @param {number} level - The WaniKani level to toggle.
+         */
+        function updateWkFilter(level) {
+            const index = activeWkLevels.indexOf(level);
+            if (index > -1) {
+                activeWkLevels.splice(index, 1);
+            } else {
+                activeWkLevels.push(level);
+            }
+            localStorage.setItem('wkFilters', JSON.stringify(activeWkLevels));
+            updateFilterButtons();
+            generateRandomKanji();
+        }
+
+        /**
+         * Updates the visual state of all filter buttons.
+         */
+        function updateFilterButtons() {
+            // Update JLPT buttons
+            const jlptButtons = jlptFilters.querySelectorAll('button');
+            jlptButtons.forEach(button => {
+                const level = parseInt(button.dataset.level);
+                if (activeJlptLevels.includes(level)) {
+                    button.classList.add('bg-indigo-600', 'text-white');
+                    button.classList.remove('bg-gray-200', 'dark:bg-gray-700');
+                } else {
+                    button.classList.remove('bg-indigo-600', 'text-white');
+                    button.classList.add('bg-gray-200', 'dark:bg-gray-700');
+                }
+            });
+
+            // Update WaniKani buttons
+            const wkButtons = wkFilters.querySelectorAll('button');
+            wkButtons.forEach(button => {
+                const level = parseInt(button.dataset.level);
+                if (activeWkLevels.includes(level)) {
+                    button.classList.add('bg-orange-600', 'text-white');
+                    button.classList.remove('bg-gray-200', 'dark:bg-gray-700');
+                } else {
+                    button.classList.remove('bg-orange-600', 'text-white');
+                    button.classList.add('bg-gray-200', 'dark:bg-gray-700');
+                }
+            });
+        }
+
+        /**
+         * Loads filter settings from local storage.
+         */
+        function loadFilters() {
+            const savedJlpt = localStorage.getItem('jlptFilters');
+            if (savedJlpt) {
+                activeJlptLevels = JSON.parse(savedJlpt);
+            }
+            const savedWk = localStorage.getItem('wkFilters');
+            if (savedWk) {
+                activeWkLevels = JSON.parse(savedWk);
+            }
+            const savedCount = localStorage.getItem('generationCount');
+            if (savedCount) {
+               generationCount = parseInt(savedCount, 10);
+            }
+            generationCounter.textContent = generationCount;
+        }
+
+        /**
+         * Increments the generation count and updates the display.
+         */
+        function incrementGenerationCount() {
+           generationCount++;
+           localStorage.setItem('generationCount', generationCount);
+           generationCounter.textContent = generationCount;
+        }
+
 
         // --- Event Listeners ---
         generateBtn.addEventListener('click', generateRandomKanji);
+        jlptFilterToggleBtn.addEventListener('click', () => toggleFilterVisibility(jlptFilters, jlptFilterToggleBtn));
+        wkFilterToggleBtn.addEventListener('click', () => toggleFilterVisibility(wkFilters, wkFilterToggleBtn));
 
         // --- Initial Load ---
-        // On page load, fetch and parse the CSV from the specified URL.
         document.addEventListener('DOMContentLoaded', () => {
-             const kanjiCsvUrl = 'joyo.csv';
-             loadAndParseKanjiData(kanjiCsvUrl);
+            loadFilters();
+            
+            // Create JLPT filter buttons
+            for (let i = 1; i <= 5; i++) {
+                const button = document.createElement('button');
+                button.textContent = `N${i}`;
+                button.dataset.level = i;
+                button.classList.add('px-2', 'py-2', 'text-sm', 'rounded-md', 'bg-gray-200', 'dark:bg-gray-700', 'transition-colors');
+                button.addEventListener('click', () => updateJlptFilter(i));
+                jlptFilters.appendChild(button);
+            }
+
+            // Create WaniKani filter buttons
+            for (let i = 1; i <= 60; i++) {
+                const button = document.createElement('button');
+                button.textContent = i;
+                button.dataset.level = i;
+                button.classList.add('px-2', 'py-2', 'text-sm', 'rounded-md', 'bg-gray-200', 'dark:bg-gray-700', 'transition-colors');
+                button.addEventListener('click', () => updateWkFilter(i));
+                wkFilters.appendChild(button);
+            }
+
+            updateFilterButtons();
+            const kanjiJsonUrl = 'joyo.json';
+            loadAndParseKanjiData(kanjiJsonUrl);
         });
 
     </script>
